@@ -6,6 +6,7 @@ import jwt from "jsonwebtoken";
 import cors from "cors";
 
 import { prisma } from "./lib/prisma.js";
+
 import {
   createUserSchema,
   forgotPasswordSchema,
@@ -20,9 +21,14 @@ import {
 
 const app = express();
 
+const resetCodes = new Map<string, string>();
+
 app.use(cors());
 app.use(express.json());
 
+/*
+  TESTE DA API
+*/
 app.get("/health", (request, response) => {
   return response.json({
     message: "API funcionando",
@@ -193,7 +199,11 @@ app.post("/forgot-password", async (request, response) => {
     });
   }
 
-  const resetCode = "123456";
+  const resetCode = Math.floor(
+    100000 + Math.random() * 900000
+  ).toString();
+
+  resetCodes.set(email, resetCode);
 
   console.log(
     `Código de recuperação para ${email}: ${resetCode}`
@@ -219,7 +229,9 @@ app.post("/reset-password", async (request, response) => {
 
   const { email, code, newPassword } = result.data;
 
-  if (code !== "123456") {
+  const savedCode = resetCodes.get(email);
+
+  if (!savedCode || savedCode !== code) {
     return response.status(400).json({
       message: "Código inválido",
     });
@@ -237,7 +249,10 @@ app.post("/reset-password", async (request, response) => {
     });
   }
 
-  const passwordHash = await bcrypt.hash(newPassword, 10);
+  const passwordHash = await bcrypt.hash(
+    newPassword,
+    10
+  );
 
   await prisma.user.update({
     where: {
@@ -247,6 +262,8 @@ app.post("/reset-password", async (request, response) => {
       password: passwordHash,
     },
   });
+
+  resetCodes.delete(email);
 
   return response.json({
     message: "Senha alterada com sucesso",
